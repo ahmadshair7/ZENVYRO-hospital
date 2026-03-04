@@ -191,6 +191,89 @@ class StorageService {
     return all.where((p) => (p.dischargeMedicines?.isNotEmpty ?? false) && !p.isDischargeMedicinesDispensed).toList();
   }
 
+  static Future<List<Map<String, dynamic>>> getPendingIndoorPharmacyPrescriptions() async {
+    await loadWards();
+    List<Map<String, dynamic>> pending = [];
+    
+    // Check all wards for occupied beds with pending medicines
+    for (var ward in [...predefinedWards, ...emergencyUnits, ...operationTheaters]) {
+      for (var bed in ward.beds) {
+        if (bed.isOccupied && (bed.inpatientMedicines?.isNotEmpty ?? false) && !bed.isInpatientMedicinesDispensed) {
+          pending.add({
+            'bed': bed,
+            'wardName': ward.name,
+            'patientName': bed.patientName,
+            'patientAge': bed.patientAge,
+            'medicines': bed.inpatientMedicines,
+          });
+        }
+      }
+    }
+    return pending;
+  }
+
+  static Future<List<Map<String, dynamic>>> getAllDispensedPharmacyRecords() async {
+    List<Map<String, dynamic>> dispensed = [];
+
+    // 1. OPD Dispensed
+    final opd = await getAllPatients();
+    for (var p in opd) {
+      for (var c in p.history) {
+        if (c.isDispensed) {
+          dispensed.add({
+            'patientName': p.name,
+            'patientAge': p.age,
+            'medicines': c.medicines.join(", "),
+            'source': 'OPD',
+            'date': c.date,
+          });
+        }
+      }
+    }
+
+    // 2. Emergency Dispensed
+    final emergency = await getAllEmergencyPatients();
+    for (var p in emergency) {
+      if (p.isEmergencyMedicinesDispensed) {
+        dispensed.add({
+          'patientName': p.name,
+          'patientAge': p.age,
+          'medicines': p.emergencyMedicines,
+          'source': 'Emergency',
+          'date': DateTime.now(), // Placeholder as we don't store dispense date yet
+        });
+      }
+      if (p.isDischargeMedicinesDispensed) {
+        dispensed.add({
+          'patientName': p.name,
+          'patientAge': p.age,
+          'medicines': p.dischargeMedicines,
+          'source': 'Discharge',
+          'date': DateTime.now(),
+        });
+      }
+    }
+
+    // 3. Indoor Dispensed
+    await loadWards();
+    for (var ward in [...predefinedWards, ...emergencyUnits, ...operationTheaters]) {
+      for (var bed in ward.beds) {
+        if (bed.isInpatientMedicinesDispensed && (bed.inpatientMedicines?.isNotEmpty ?? false)) {
+          dispensed.add({
+            'patientName': bed.patientName ?? 'Unknown',
+            'patientAge': bed.patientAge ?? 'N/A',
+            'medicines': bed.inpatientMedicines,
+            'source': 'Indoor (${ward.name})',
+            'date': DateTime.now(),
+          });
+        }
+      }
+    }
+
+    dispensed.sort((a, b) => (b['date'] as DateTime).compareTo(a['date'] as DateTime));
+    return dispensed;
+  }
+
   // ─── ADMIN STATS ─────────────────────────────────────────────────────────
 
   static Future<Map<String, int>> getHospitalOccupancyStats() async {
@@ -226,6 +309,62 @@ class StorageService {
     };
   }
 
+  static Future<Map<String, dynamic>> getAdminDetailedStats() async {
+    await loadWards();
+    final now = DateTime.now();
+    final todayStr = "${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}";
+
+    // 1. Patient Registrations Today
+    final opd = await getAllPatients();
+    final emergency = await getAllEmergencyPatients();
+    int todayTotal = 0;
+    todayTotal += opd.where((p) => p.registrationDate == todayStr).length;
+    todayTotal += emergency.where((p) => p.registrationDate == todayStr).length;
+
+    // 2. Active Counts
+    int opdActive = opd.where((p) => p.status == 'Pending' || (p.status == 'Checked' && p.registrationDate == todayStr)).length;
+    
+    // 3. Bed Management Details
+    int indoorOccupied = 0;
+    int indoorTotal = 0;
+    for (var w in predefinedWards) {
+      indoorOccupied += w.occupiedBedsCount;
+      indoorTotal += w.beds.length;
+    }
+
+    int emergencyOccupied = 0;
+    int emergencyTotal = 0;
+    for (var u in emergencyUnits) {
+      emergencyOccupied += u.occupiedBedsCount;
+      emergencyTotal += u.beds.length;
+    }
+
+    int otOccupied = 0;
+    int otTotal = 0;
+    for (var o in operationTheaters) {
+      otOccupied += o.occupiedBedsCount;
+      otTotal += o.beds.length;
+    }
+
+    // 4. Staff On Duty
+    final staff = await getAllStaff();
+    int staffOnDuty = staff.where((s) => s.isOnDuty).length;
+
+    return {
+      'todayTotal': todayTotal,
+      'opdActive': opdActive,
+      'emergencyOccupied': emergencyOccupied,
+      'emergencyTotal': emergencyTotal,
+      'emergencyFree': emergencyTotal - emergencyOccupied,
+      'indoorOccupied': indoorOccupied,
+      'indoorTotal': indoorTotal,
+      'indoorFree': indoorTotal - indoorOccupied,
+      'otOccupied': otOccupied,
+      'otTotal': otTotal,
+      'staffOnDuty': staffOnDuty,
+    };
+  }
+
   static Future<int> getTodayTotalPatients() async {
     final now = DateTime.now();
     final todayStr = "${now.day.toString().padLeft(2, '0')}-${now.month.toString().padLeft(2, '0')}-${now.year}";
@@ -239,7 +378,6 @@ class StorageService {
 
     return count;
   }
-
   // ─── STAFF MANAGEMENT ────────────────────────────────────────────────────
 
   static Future<void> saveStaff(Staff member) async {
@@ -269,6 +407,37 @@ class StorageService {
       print('Error fetching staff: $e');
       return [];
     }
+  }
+
+  static Future<Patient?> getPatientById(String id) async {
+    // Search in OPD
+    final opd = await getAllPatients();
+    final opdPatient = opd.where((p) => p.id == id).toList();
+    if (opdPatient.isNotEmpty) return opdPatient.first;
+
+    // Search in Emergency
+    final emergency = await getAllEmergencyPatients();
+    final emergencyPatient = emergency.where((p) => p.id == id).toList();
+    if (emergencyPatient.isNotEmpty) return emergencyPatient.first;
+
+    return null;
+  }
+
+  static Future<void> transferPatientToOPD(Patient patient, String doctorCategory) async {
+    // 1. Remove from Emergency if exists
+    final emergency = await getAllEmergencyPatients();
+    if (emergency.any((p) => p.id == patient.id)) {
+      await deleteEmergencyPatient(patient.id);
+    }
+
+    // 2. Add/Update in OPD with new status and category
+    final updatedPatient = patient.copyWith(
+      status: 'Pending',
+      categoryName: doctorCategory,
+      isReferredToEmergency: false,
+      isReferredToIndoor: false,
+    );
+    await savePatient(updatedPatient);
   }
 
   // ─── OT SCHEDULES ────────────────────────────────────────────────────────

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/ward_model.dart';
 import 'ot_schedule_screen.dart';
+import 'ot_history_screen.dart';
 
 class OtScreen extends StatelessWidget {
   const OtScreen({super.key});
@@ -15,6 +16,13 @@ class OtScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('SURGICAL DEPARTMENT'),
         backgroundColor: primaryPurple,
+        actions: [
+          TextButton.icon(
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const OtHistoryScreen())),
+            icon: const Icon(Icons.history_rounded, color: Colors.white, size: 18),
+            label: const Text('HISTORY', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         child: Column(

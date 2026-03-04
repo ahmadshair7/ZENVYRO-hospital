@@ -276,7 +276,177 @@ class _DoctorCheckupScreenState extends State<DoctorCheckupScreen> {
     if (mounted) Navigator.pop(context);
   }
 
-  void _referToEmergency() async { /* ER Logic */ }
-  void _showIndoorReferralDialog() { /* Ward Logic */ }
-  void _showOTScheduleDialog() { /* OT Logic */ }
+  void _referToEmergency() async {
+    if (widget.patient == null) return;
+    
+    final findings = "Complaint: ${_complaintController.text}\nDiagnosis: ${_diagnosisController.text}\nVitals: ${_vitalsController.text}";
+    final updated = widget.patient!.copyWith(
+      status: 'Awaiting Triage',
+      isReferredToEmergency: true,
+      registrationDate: "${DateTime.now().day.toString().padLeft(2, '0')}-${DateTime.now().month.toString().padLeft(2, '0')}-${DateTime.now().year}",
+      registrationTime: "${DateTime.now().hour.toString().padLeft(2, '0')}:${DateTime.now().minute.toString().padLeft(2, '0')}",
+      initialComplaint: findings,
+    );
+
+    await StorageService.saveEmergencyPatient(updated);
+    // Also update OPD status
+    await StorageService.savePatient(widget.patient!.copyWith(status: 'Referred to ER'));
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Patient referred to Emergency'), backgroundColor: Colors.red),
+      );
+      Navigator.pop(context);
+    }
+  }
+
+  void _showIndoorReferralDialog() {
+    if (widget.patient == null) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Select Ward for ${widget.patient!.name}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: predefinedWards.length,
+            itemBuilder: (context, index) {
+              final ward = predefinedWards[index];
+              return ListTile(
+                leading: Icon(ward.icon, color: ward.color),
+                title: Text(ward.name),
+                subtitle: Text('Free Beds: ${ward.availableBedsCount}'),
+                onTap: () async {
+                  final findings = "Complaint: ${_complaintController.text}\nDiagnosis: ${_diagnosisController.text}\nVitals: ${_vitalsController.text}";
+                  final updated = widget.patient!.copyWith(
+                    status: 'Assigned',
+                    emergencyCategory: ward.name,
+                    isReferredToIndoor: true,
+                    initialComplaint: findings,
+                  );
+                  await StorageService.saveEmergencyPatient(updated);
+                  // Also update OPD status
+                  await StorageService.savePatient(widget.patient!.copyWith(status: 'Referred to Ward'));
+
+                  if (mounted) {
+                    Navigator.pop(context); // Close dialog
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Referred to ${ward.name}'), backgroundColor: Colors.teal),
+                    );
+                    Navigator.pop(context); // Exit checkup screen
+                  }
+                },
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+  void _showOTScheduleDialog() {
+    if (widget.patient == null) return;
+
+    String? selectedOT;
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
+    final durationController = TextEditingController();
+    final indicationsController = TextEditingController(text: _diagnosisController.text);
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Schedule Surgery', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Select OT Room'),
+                  items: operationTheaters.map((ot) => DropdownMenuItem(value: ot.name, child: Text(ot.name))).toList(),
+                  onChanged: (v) => setDialogState(() => selectedOT = v),
+                ),
+                const SizedBox(height: 16),
+                ListTile(
+                  leading: const Icon(Icons.calendar_today_rounded),
+                  title: Text(selectedDate == null ? 'Select Date' : '${selectedDate!.day}-${selectedDate!.month}-${selectedDate!.year}'),
+                  onTap: () async {
+                    final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30)));
+                    if (d != null) setDialogState(() => selectedDate = d);
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.access_time_rounded),
+                  title: Text(selectedTime == null ? 'Select Time' : selectedTime!.format(context)),
+                  onTap: () async {
+                    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                    if (t != null) setDialogState(() => selectedTime = t);
+                  },
+                ),
+                TextField(
+                  controller: durationController,
+                  decoration: const InputDecoration(labelText: 'Estimated Duration', hintText: 'e.g., 2 hours'),
+                ),
+                TextField(
+                  controller: indicationsController,
+                  decoration: const InputDecoration(labelText: 'Surgical Indications'),
+                  maxLines: 2,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+            ElevatedButton(
+              onPressed: () async {
+                if (selectedOT == null || selectedDate == null || selectedTime == null) {
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please fill all fields')));
+                  return;
+                }
+
+                final dateStr = "${selectedDate!.day.toString().padLeft(2, '0')}-${selectedDate!.month.toString().padLeft(2, '0')}-${selectedDate!.year}";
+                final timeStr = "${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}";
+
+                final schedule = OTSchedule(
+                  id: DateTime.now().millisecondsSinceEpoch.toString(),
+                  patientId: widget.patient!.id,
+                  patientName: widget.patient!.name,
+                  patientAge: widget.patient!.age,
+                  patientSex: widget.patient!.sex,
+                  otRoom: selectedOT!,
+                  date: dateStr,
+                  time: timeStr,
+                  medicalHistory: indicationsController.text,
+                  estimatedDuration: durationController.text,
+                  scheduledBy: widget.category.name,
+                );
+
+                await StorageService.saveOTSchedule(schedule);
+                
+                final updatedPatient = widget.patient!.copyWith(
+                  otDate: dateStr,
+                  otTime: timeStr,
+                  otName: selectedOT,
+                  status: 'Scheduled for OT',
+                );
+                await StorageService.savePatient(updatedPatient);
+
+                if (mounted) {
+                  Navigator.pop(context);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Surgery Scheduled Successfully'), backgroundColor: Colors.deepPurple),
+                  );
+                  Navigator.pop(context);
+                }
+              },
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple, foregroundColor: Colors.white),
+              child: const Text('SCHEDULE'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

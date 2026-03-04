@@ -143,72 +143,229 @@ class _OtScheduleScreenState extends State<OtScheduleScreen> {
   }
 
   Widget _buildScheduleList() {
-    return ListView.builder(
+    final active = _schedules.where((s) => s.status == 'Active').toList();
+    final pending = _schedules.where((s) => s.status == 'Pending').toList();
+    final completed = _schedules.where((s) => s.status == 'Completed').toList();
+
+    return ListView(
       padding: const EdgeInsets.all(24),
-      itemCount: _schedules.length,
-      itemBuilder: (context, index) {
-        final s = _schedules[index];
-        return Card(
-          elevation: 0,
-          margin: const EdgeInsets.only(bottom: 16),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: Colors.grey.shade200)),
-          child: ExpansionTile(
-            tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            leading: CircleAvatar(
-              backgroundColor: widget.ot.color.withOpacity(0.1),
-              child: Text('${index + 1}', style: TextStyle(color: widget.ot.color, fontWeight: FontWeight.bold)),
-            ),
-            title: Text(s.patientName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
-            subtitle: Text('${s.date} • ${s.time}', style: const TextStyle(fontSize: 12)),
-            trailing: _buildStatusChip(s.status),
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (active.isNotEmpty) ...[
+          _buildSubHeader('IN PROGRESS'),
+          ...active.map((s) => _buildScheduleCard(s, isHighPriority: true)),
+          const SizedBox(height: 24),
+        ],
+        if (pending.isNotEmpty) ...[
+          _buildSubHeader('PENDING QUEUE'),
+          ...pending.map((s) => _buildScheduleCard(s)),
+          const SizedBox(height: 24),
+        ],
+        if (completed.isNotEmpty) ...[
+          _buildSubHeader('TODAY\'S COMPLETED'),
+          ...completed.map((s) => _buildScheduleCard(s)),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSubHeader(String title) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, left: 4),
+      child: Text(title, style: GoogleFonts.outfit(fontSize: 11, fontWeight: FontWeight.w900, color: Colors.blueGrey, letterSpacing: 1.5)),
+    );
+  }
+
+  Widget _buildScheduleCard(OTSchedule s, {bool isHighPriority = false}) {
+    return Card(
+      elevation: isHighPriority ? 8 : 0,
+       shadowColor: widget.ot.color.withOpacity(0.2),
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: isHighPriority ? widget.ot.color : Colors.grey.shade200, width: isHighPriority ? 2 : 1),
+      ),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+        leading: CircleAvatar(
+          backgroundColor: widget.ot.color.withOpacity(0.1),
+          child: Icon(isHighPriority ? Icons.play_circle_fill_rounded : Icons.pending_actions_rounded, color: widget.ot.color),
+        ),
+        title: Text(s.patientName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 16)),
+        subtitle: Text('${s.date} • ${s.time}', style: const TextStyle(fontSize: 12)),
+        trailing: _buildStatusChip(s.status),
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Divider(),
+                const SizedBox(height: 12),
+                _buildDetailRow('Age/Sex', '${s.patientAge} | ${s.patientSex ?? "N/A"}'),
+                _buildDetailRow('Plan', s.estimatedDuration),
+                _buildDetailRow('Surgeon', s.scheduledBy),
+                if (s.assignedStaffIds.isNotEmpty)
+                  FutureBuilder<List<Staff>>(
+                    future: StorageService.getAllStaff(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData) return const SizedBox.shrink();
+                      final names = snapshot.data!
+                        .where((staff) => s.assignedStaffIds.contains(staff.id))
+                        .map((staff) => staff.name)
+                        .join(", ");
+                      return _buildDetailRow('Surgical Team', names);
+                    },
+                  ),
+                const SizedBox(height: 16),
+                _buildNoteSection('INDICATIONS', s.medicalHistory),
+                if (s.preOpNotes.isNotEmpty) _buildNoteSection('PRE-OP NOTES', s.preOpNotes),
+                if (s.intraOpNotes.isNotEmpty) _buildNoteSection('INTRA-OP NOTES', s.intraOpNotes),
+                if (s.postOpNotes.isNotEmpty) _buildNoteSection('POST-OP NOTES', s.postOpNotes),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
                   children: [
-                    const Divider(),
-                    const SizedBox(height: 8),
-                    _buildDetailRow('Age/Sex', '${s.patientAge} | ${s.patientSex ?? "N/A"}'),
-                    _buildDetailRow('Duration', s.estimatedDuration),
-                    _buildDetailRow('Surgeon', s.scheduledBy),
-                    const SizedBox(height: 12),
-                    const Text('SURGICAL INDICATIONS', style: TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Colors.blueGrey, letterSpacing: 1)),
-                    const SizedBox(height: 8),
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12)),
-                      child: Text(s.medicalHistory.isEmpty ? 'N/A' : s.medicalHistory, style: const TextStyle(fontSize: 13)),
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        if (s.status == 'Pending')
-                          _buildActionButton('START PROCEDURE', Colors.blue, () => _updateStatus(s, 'Active')),
-                        if (s.status == 'Active')
-                          _buildActionButton('MARK RECOVERY', Colors.green, () => _updateStatus(s, 'Completed')),
-                        if (s.status != 'Completed') ...[
-                          const SizedBox(width: 8),
-                          PopupMenuButton<String>(
-                            onSelected: (v) => _updateStatus(s, v),
-                            itemBuilder: (c) => [
-                              const PopupMenuItem(value: 'Pending', child: Text('Reset to Pending')),
-                              const PopupMenuItem(value: 'Completed', child: Text('Complete Manually')),
-                            ],
-                            child: const Icon(Icons.more_vert_rounded, color: Colors.blueGrey),
-                          ),
-                        ],
+                    if (s.status == 'Pending')
+                      _buildActionButton('START PROCEDURE', Colors.blue, () => _showStartProcedureDialog(s)),
+                    if (s.status == 'Active')
+                      _buildActionButton('MARK RECOVERY', Colors.green, () => _showCompleteProcedureDialog(s)),
+                    const SizedBox(width: 8),
+                    PopupMenuButton<String>(
+                      onSelected: (v) => _updateStatus(s, v),
+                      itemBuilder: (c) => [
+                        const PopupMenuItem(value: 'Pending', child: Text('Reset to Pending')),
+                        const PopupMenuItem(value: 'Completed', child: Text('Manual Completion')),
+                        const PopupMenuItem(value: 'Cancelled', child: Text('Cancel Surgery', style: TextStyle(color: Colors.red))),
                       ],
+                      child: const Icon(Icons.more_vert_rounded, color: Colors.blueGrey),
                     ),
                   ],
                 ),
-              ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNoteSection(String label, String content) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 10, color: Colors.blueGrey, letterSpacing: 1)),
+          const SizedBox(height: 6),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.grey.shade50, borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.grey.shade100)),
+            child: Text(content, style: const TextStyle(fontSize: 13, height: 1.4)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showStartProcedureDialog(OTSchedule s) async {
+    final preOpController = TextEditingController();
+    final allStaff = await StorageService.getAllStaff();
+    final otStaff = allStaff.where((st) => st.department == 'OT' && st.assignment == widget.ot.name && st.isOnDuty).toList();
+    List<String> selectedStaffIds = [];
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Start: ${s.patientName}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('SELECT SURGICAL TEAM', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.blueGrey)),
+                const SizedBox(height: 8),
+                if (otStaff.isEmpty) 
+                  const Text('No staff on duty in this OT', style: TextStyle(color: Colors.red, fontSize: 12)),
+                ...otStaff.map((st) => CheckboxListTile(
+                  title: Text(st.name, style: const TextStyle(fontSize: 14)),
+                  subtitle: Text(st.role, style: const TextStyle(fontSize: 11)),
+                  value: selectedStaffIds.contains(st.id),
+                  dense: true,
+                  onChanged: (val) => setDialogState(() => val! ? selectedStaffIds.add(st.id) : selectedStaffIds.remove(st.id)),
+                )),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: preOpController,
+                  decoration: const InputDecoration(labelText: 'Pre-operative Notes', hintText: 'Physical prep, anesthesia, etc.'),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+            ElevatedButton(
+              onPressed: () async {
+                final updated = OTSchedule(
+                  id: s.id, patientId: s.patientId, patientName: s.patientName, patientAge: s.patientAge, patientSex: s.patientSex,
+                  otRoom: s.otRoom, date: s.date, time: s.time, medicalHistory: s.medicalHistory, estimatedDuration: s.estimatedDuration,
+                  scheduledBy: s.scheduledBy, status: 'Active', preOpNotes: preOpController.text, assignedStaffIds: selectedStaffIds,
+                );
+                await StorageService.saveOTSchedule(updated);
+                if (mounted) { Navigator.pop(context); _loadSchedules(); }
+              },
+              child: const Text('ENGAGE OT'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCompleteProcedureDialog(OTSchedule s) async {
+    final intraOpController = TextEditingController();
+    final postOpController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Complete Review: ${s.patientName}'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: intraOpController, decoration: const InputDecoration(labelText: 'Intra-operative Findings'), maxLines: 3),
+              const SizedBox(height: 12),
+              TextField(controller: postOpController, decoration: const InputDecoration(labelText: 'Post-operative Orders'), maxLines: 3),
             ],
           ),
-        );
-      },
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('STAY ACTIVE')),
+          ElevatedButton(
+            onPressed: () async {
+              final now = DateTime.now();
+              final updated = OTSchedule(
+                id: s.id, patientId: s.patientId, patientName: s.patientName, patientAge: s.patientAge, patientSex: s.patientSex,
+                otRoom: s.otRoom, date: s.date, time: s.time, medicalHistory: s.medicalHistory, estimatedDuration: s.estimatedDuration,
+                scheduledBy: s.scheduledBy, status: 'Completed', preOpNotes: s.preOpNotes, assignedStaffIds: s.assignedStaffIds,
+                intraOpNotes: intraOpController.text, postOpNotes: postOpController.text,
+                completionDate: "${now.day}-${now.month}-${now.year}",
+                completionTime: "${now.hour}:${now.minute}",
+              );
+              await StorageService.saveOTSchedule(updated);
+              if (mounted) { Navigator.pop(context); _loadSchedules(); }
+            },
+            child: const Text('FINALIZE CASE'),
+          ),
+        ],
+      ),
     );
   }
 
@@ -219,7 +376,7 @@ class _OtScheduleScreenState extends State<OtScheduleScreen> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(label, style: const TextStyle(fontSize: 12, color: Colors.blueGrey)),
-          Text(value, style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold)),
+          Expanded(child: Text(value, style: GoogleFonts.outfit(fontSize: 12, fontWeight: FontWeight.bold), textAlign: TextAlign.right)),
         ],
       ),
     );
@@ -228,22 +385,28 @@ class _OtScheduleScreenState extends State<OtScheduleScreen> {
   Widget _buildActionButton(String label, Color color, VoidCallback onTap) {
     return ElevatedButton(
       onPressed: onTap,
-      style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+      style: ElevatedButton.styleFrom(backgroundColor: color, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), elevation: 0),
       child: Text(label, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
     );
   }
 
   Widget _buildStatusChip(String status) {
     Color color = status == 'Active' ? Colors.blue : (status == 'Completed' ? Colors.green : Colors.orange);
+    if (status == 'Cancelled') color = Colors.red;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
-      child: Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.5)),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(10)),
+      child: Text(status.toUpperCase(), style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.w900, letterSpacing: 0.8)),
     );
   }
 
   void _updateStatus(OTSchedule s, String status) async {
-    final updated = OTSchedule(id: s.id, patientId: s.patientId, patientName: s.patientName, patientAge: s.patientAge, patientSex: s.patientSex, otRoom: s.otRoom, date: s.date, time: s.time, medicalHistory: s.medicalHistory, estimatedDuration: s.estimatedDuration, scheduledBy: s.scheduledBy, status: status);
+    final updated = OTSchedule(
+      id: s.id, patientId: s.patientId, patientName: s.patientName, patientAge: s.patientAge, patientSex: s.patientSex,
+      otRoom: s.otRoom, date: s.date, time: s.time, medicalHistory: s.medicalHistory, estimatedDuration: s.estimatedDuration,
+      scheduledBy: s.scheduledBy, status: status, preOpNotes: s.preOpNotes, intraOpNotes: s.intraOpNotes,
+      postOpNotes: s.postOpNotes, assignedStaffIds: s.assignedStaffIds,
+    );
     await StorageService.saveOTSchedule(updated);
     _loadSchedules();
   }

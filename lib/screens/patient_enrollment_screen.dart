@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/doctor_model.dart';
 import '../services/storage_service.dart';
@@ -122,6 +123,7 @@ class _PatientEnrollmentScreenState extends State<PatientEnrollmentScreen> {
                             label: 'Age',
                             icon: Icons.calendar_today_rounded,
                             keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                             validator: (value) => value == null || value.isEmpty ? 'Enter age' : null,
                           ),
                         ),
@@ -135,7 +137,15 @@ class _PatientEnrollmentScreenState extends State<PatientEnrollmentScreen> {
                       label: 'Mobile Number',
                       icon: Icons.phone_android_rounded,
                       keyboardType: TextInputType.phone,
-                      validator: (value) => value == null || value.isEmpty ? 'Enter mobile' : null,
+                      inputFormatters: [
+                        FilteringTextInputFormatter.digitsOnly,
+                        LengthLimitingTextInputFormatter(20),
+                      ],
+                      validator: (value) {
+                        if (value == null || value.isEmpty) return 'Enter mobile';
+                        if (value.length < 10) return 'Include country code (min 10 digits)';
+                        return null;
+                      },
                     ),
                     const SizedBox(height: 32),
                     _buildSectionTitle('Medical Assignment'),
@@ -205,11 +215,13 @@ class _PatientEnrollmentScreenState extends State<PatientEnrollmentScreen> {
     required String label,
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       validator: validator,
       style: GoogleFonts.outfit(fontWeight: FontWeight.w500),
       decoration: InputDecoration(

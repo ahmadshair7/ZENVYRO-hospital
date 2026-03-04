@@ -17,6 +17,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   List<Staff> _staffList = [];
   bool _isLoading = true;
   String _searchQuery = '';
+  String _selectedShiftFilter = 'All';
 
   @override
   void initState() {
@@ -43,9 +44,11 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
   Widget build(BuildContext context) {
     const primaryGrey = Color(0xFF607D8B);
     final filteredStaff = _staffList.where((s) =>
-        s.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+        (s.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
         s.role.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-        s.department.toLowerCase().contains(_searchQuery.toLowerCase())).toList();
+        s.department.toLowerCase().contains(_searchQuery.toLowerCase())) &&
+        (_selectedShiftFilter == 'All' || s.shift == _selectedShiftFilter)
+    ).toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
@@ -56,6 +59,7 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       body: Column(
         children: [
           _buildBrandedHeader(context, primaryGrey),
+          _buildFilterBar(),
           _buildSearchBar(),
           Expanded(
             child: _isLoading
@@ -339,5 +343,29 @@ class _StaffManagementScreenState extends State<StaffManagementScreen> {
       case 'Technician': return Colors.orange;
       default: return Colors.blueGrey;
     }
+  }
+
+  Widget _buildFilterBar() {
+    final shifts = ['All', 'Morning', 'Evening', 'Night'];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+      child: Row(
+        children: shifts.map((shift) {
+          final isSelected = _selectedShiftFilter == shift;
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ChoiceChip(
+              label: Text(shift.toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : Colors.blueGrey)),
+              selected: isSelected,
+              onSelected: (val) => setState(() => _selectedShiftFilter = shift),
+              selectedColor: const Color(0xFF607D8B),
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12), side: BorderSide(color: isSelected ? Colors.transparent : Colors.grey.shade200)),
+            ),
+          );
+        }).toList(),
+      ),
+    );
   }
 }

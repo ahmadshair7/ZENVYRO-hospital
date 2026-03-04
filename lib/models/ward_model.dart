@@ -17,6 +17,8 @@ class Bed {
   String? otDate;
   String? otTime;
   String? inpatientMedicines; // Added for ward medicine tracking
+  bool isInpatientMedicinesDispensed;
+  final List<String> assignedStaffIds;
 
   Bed({
     required this.id,
@@ -35,6 +37,8 @@ class Bed {
     this.otDate,
     this.otTime,
     this.inpatientMedicines,
+    this.isInpatientMedicinesDispensed = false,
+    this.assignedStaffIds = const [],
   });
 
   Map<String, dynamic> toJson() => {
@@ -54,6 +58,8 @@ class Bed {
         'otDate': otDate,
         'otTime': otTime,
         'inpatientMedicines': inpatientMedicines,
+        'isInpatientMedicinesDispensed': isInpatientMedicinesDispensed,
+        'assignedStaffIds': assignedStaffIds,
       };
 
   factory Bed.fromJson(Map<String, dynamic> json) => Bed(
@@ -73,6 +79,8 @@ class Bed {
         otDate: json['otDate'],
         otTime: json['otTime'],
         inpatientMedicines: json['inpatientMedicines'],
+        isInpatientMedicinesDispensed: json['isInpatientMedicinesDispensed'] ?? false,
+        assignedStaffIds: List<String>.from(json['assignedStaffIds'] ?? []),
       );
 }
 

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/doctor_model.dart';
 import '../services/storage_service.dart';
@@ -56,6 +57,7 @@ class _EmergencyEnrollmentScreenState extends State<EmergencyEnrollmentScreen> {
                             label: 'Age',
                             icon: Icons.calendar_today_rounded,
                             keyboardType: TextInputType.number,
+                            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                             validator: (value) => value == null || value.isEmpty ? 'Enter age' : null,
                           ),
                         ),
@@ -138,11 +140,13 @@ class _EmergencyEnrollmentScreenState extends State<EmergencyEnrollmentScreen> {
     required IconData icon,
     int maxLines = 1,
     TextInputType keyboardType = TextInputType.text,
+    List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
   }) {
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
+      inputFormatters: inputFormatters,
       validator: validator,
       maxLines: maxLines,
       style: GoogleFonts.outfit(fontWeight: FontWeight.w500),

@@ -4,6 +4,7 @@ import '../models/ward_model.dart';
 import '../services/storage_service.dart';
 import '../models/doctor_model.dart';
 import '../models/staff_model.dart';
+import '../models/ot_schedule_model.dart';
 
 class WardDetailScreen extends StatefulWidget {
   final Ward ward;
@@ -298,6 +299,21 @@ class _WardDetailScreenState extends State<WardDetailScreen> {
                 _showTransferDialog(bed);
               }),
               const SizedBox(height: 8),
+              _buildActionTile(Icons.outbound_rounded, 'Shift to OPD', Colors.indigo, () {
+                Navigator.pop(context);
+                _showShiftToOPDDialog(bed);
+              }),
+              const SizedBox(height: 8),
+              _buildActionTile(Icons.medical_services_rounded, 'Shift to OT', Colors.deepPurple, () {
+                Navigator.pop(context);
+                _showShiftToOTDialog(bed);
+              }),
+              const SizedBox(height: 8),
+              _buildActionTile(Icons.assignment_ind_rounded, 'Assign Nursing Staff', Colors.teal, () {
+                Navigator.pop(context);
+                _showStaffAssignmentDialog(bed);
+              }),
+              const SizedBox(height: 8),
               _buildActionTile(Icons.logout_rounded, 'Discharge Patient', Colors.red, () {
                 Navigator.pop(context);
                 _showDischargeDialog(bed);
@@ -305,7 +321,72 @@ class _WardDetailScreenState extends State<WardDetailScreen> {
             ],
           ),
         ),
-        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('CLOSE'))],
+        actions: [
+          if (bed.assignedStaffIds.isNotEmpty) ...[
+            FutureBuilder<List<Staff>>(
+              future: StorageService.getAllStaff(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return const SizedBox.shrink();
+                final names = snapshot.data!
+                  .where((st) => bed.assignedStaffIds.contains(st.id))
+                  .map((st) => st.name)
+                  .join(", ");
+                return Text('Staff Assigned: $names', style: const TextStyle(fontSize: 10, color: Colors.blueGrey, fontStyle: FontStyle.italic));
+              },
+            ),
+            const Spacer(),
+          ],
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('CLOSE')),
+        ],
+      ),
+    );
+  }
+
+  void _showStaffAssignmentDialog(Bed bed) async {
+    final allStaff = await StorageService.getAllStaff();
+    final wardStaff = allStaff.where((s) => (s.department == 'Indoor' || s.department == 'Emergency') && s.assignment == widget.ward.name && s.isOnDuty).toList();
+    List<String> currentIds = List.from(bed.assignedStaffIds);
+
+    if (!mounted) return;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text('Assign Staff to ${bed.id}'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          content: wardStaff.isEmpty
+            ? const Text('No staff on duty in this ward.', style: TextStyle(color: Colors.red))
+            : SizedBox(
+                width: double.maxFinite,
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: wardStaff.length,
+                  itemBuilder: (context, index) {
+                    final s = wardStaff[index];
+                    return CheckboxListTile(
+                      title: Text(s.name),
+                      subtitle: Text(s.role),
+                      value: currentIds.contains(s.id),
+                      onChanged: (val) => setDialogState(() => val! ? currentIds.add(s.id) : currentIds.remove(s.id)),
+                    );
+                  },
+                ),
+              ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+            ElevatedButton(
+              onPressed: () async {
+                setState(() => bed.assignedStaffIds.clear());
+                setState(() => bed.assignedStaffIds.addAll(currentIds));
+                await StorageService.saveWards(predefinedWards);
+                await StorageService.saveEmergencyUnits(emergencyUnits);
+                if (mounted) Navigator.pop(context);
+              },
+              child: const Text('SAVE ASSIGNMENT'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -357,7 +438,21 @@ class _WardDetailScreenState extends State<WardDetailScreen> {
             children: [
               const Text('Select a destination station:'),
               const SizedBox(height: 16),
+              const Text('EMERGENCY UNITS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.red)),
               ...emergencyUnits.where((u) => u.availableBedsCount > 0).map((u) => ListTile(
+                leading: Icon(u.icon, color: u.color),
+                title: Text(u.name),
+                subtitle: Text('${u.availableBedsCount} Beds Free'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () async {
+                  final targetBed = u.beds.firstWhere((b) => !b.isOccupied);
+                  _transferLogic(sourceBed, targetBed, u.name);
+                  Navigator.pop(context);
+                },
+              )),
+              const Divider(),
+              const Text('INDOOR WARDS', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 10, color: Colors.teal)),
+              ...predefinedWards.where((u) => u.availableBedsCount > 0).map((u) => ListTile(
                 leading: Icon(u.icon, color: u.color),
                 title: Text(u.name),
                 subtitle: Text('${u.availableBedsCount} Beds Free'),
@@ -376,6 +471,9 @@ class _WardDetailScreenState extends State<WardDetailScreen> {
   }
 
   void _transferLogic(Bed src, Bed dst, String newCat) async {
+    final patient = await StorageService.getPatientById(src.patientId!);
+    if (patient == null) return;
+
     setState(() {
       dst.isOccupied = true;
       dst.patientId = src.patientId;
@@ -398,13 +496,154 @@ class _WardDetailScreenState extends State<WardDetailScreen> {
       src.inpatientMedicines = null;
     });
 
-    final patients = await StorageService.getAllEmergencyPatients();
-    final pIndex = patients.indexWhere((p) => p.name == dst.patientName && p.age == dst.patientAge);
-    if (pIndex != -1) {
-      final updatedPatient = patients[pIndex].copyWith(emergencyCategory: newCat);
-      await StorageService.saveEmergencyPatient(updatedPatient);
-    }
+    final updatedPatient = patient.copyWith(emergencyCategory: newCat);
+    await StorageService.saveEmergencyPatient(updatedPatient);
     await StorageService.saveEmergencyUnits(emergencyUnits);
+    await StorageService.saveWards(predefinedWards);
+  }
+
+  void _showShiftToOPDDialog(Bed bed) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Shift to OPD'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text('Select destination doctor clinic:'),
+              const SizedBox(height: 16),
+              ...opdCategories.map((cat) => ListTile(
+                leading: Icon(cat.icon, color: cat.color),
+                title: Text(cat.name),
+                onTap: () => _performShiftToOPD(bed, cat.name),
+              )),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _performShiftToOPD(Bed bed, String categoryName) async {
+    final patient = await StorageService.getPatientById(bed.patientId!);
+    if (patient == null) return;
+
+    await StorageService.transferPatientToOPD(patient, categoryName);
+    
+    setState(() {
+      bed.isOccupied = false;
+      bed.patientId = bed.patientName = bed.patientAge = bed.patientSex = null;
+      bed.inpatientMedicines = null;
+    });
+
+    await StorageService.saveEmergencyUnits(emergencyUnits);
+    await StorageService.saveWards(predefinedWards);
+    
+    if (mounted) {
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${patient.name} shifted to $categoryName OPD'), backgroundColor: Colors.indigo));
+    }
+  }
+
+  void _showShiftToOTDialog(Bed bed) {
+    String? selectedOT;
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
+    final durationController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Shift to OT'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Select OT Room'),
+                  items: operationTheaters.map((ot) => DropdownMenuItem(value: ot.name, child: Text(ot.name))).toList(),
+                  onChanged: (v) => setDialogState(() => selectedOT = v),
+                ),
+                ListTile(
+                  title: Text(selectedDate == null ? 'Select Date' : '${selectedDate!.day}-${selectedDate!.month}-${selectedDate!.year}'),
+                  onTap: () async {
+                    final d = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime.now().add(const Duration(days: 30)));
+                    if (d != null) setDialogState(() => selectedDate = d);
+                  },
+                ),
+                ListTile(
+                  title: Text(selectedTime == null ? 'Select Time' : selectedTime!.format(context)),
+                  onTap: () async {
+                    final t = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                    if (t != null) setDialogState(() => selectedTime = t);
+                  },
+                ),
+                TextField(controller: durationController, decoration: const InputDecoration(labelText: 'Duration')),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+            ElevatedButton(
+              onPressed: () => _performShiftToOT(bed, selectedOT!, selectedDate!, selectedTime!, durationController.text),
+              child: const Text('SCHEDULE & SHIFT'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _performShiftToOT(Bed bed, String otName, DateTime date, TimeOfDay time, String duration) async {
+    final patient = await StorageService.getPatientById(bed.patientId!);
+    if (patient == null) return;
+
+    final dateStr = "${date.day.toString().padLeft(2, '0')}-${date.month.toString().padLeft(2, '0')}-${date.year}";
+    final timeStr = "${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}";
+
+    final schedule = OTSchedule(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      patientId: patient.id,
+      patientName: patient.name,
+      patientAge: patient.age,
+      patientSex: patient.sex,
+      otRoom: otName,
+      date: dateStr,
+      time: timeStr,
+      medicalHistory: patient.history.isNotEmpty ? patient.history.first.diagnosis : 'Emergency Shift',
+      estimatedDuration: duration,
+      scheduledBy: 'Emergency/Ward',
+    );
+
+    await StorageService.saveOTSchedule(schedule);
+
+    final updatedPatient = patient.copyWith(
+      otDate: dateStr,
+      otTime: timeStr,
+      otName: otName,
+      status: 'Scheduled for OT',
+    );
+    
+    // For OT shift, we usually keep them in the ward bed until the surgery, 
+    // or we can mark them as shifted. User said "shifted", so we'll free the bed.
+    setState(() {
+      bed.isOccupied = false;
+      bed.patientId = bed.patientName = bed.patientAge = bed.patientSex = null;
+      bed.inpatientMedicines = null;
+    });
+
+    await StorageService.saveEmergencyPatient(updatedPatient);
+    await StorageService.saveEmergencyUnits(emergencyUnits);
+    await StorageService.saveWards(predefinedWards);
+
+    if (mounted) {
+      Navigator.pop(context); // Close dialog
+      Navigator.pop(context); // Close details dialog if open
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Patient shifted to OT schedule'), backgroundColor: Colors.deepPurple));
+    }
   }
 
   void _showAdmissionDialog(Bed bed) {

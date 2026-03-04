@@ -1,4 +1,4 @@
-package com.example.appd
+package com.zenvyro.hospital
 
 import io.flutter.embedding.android.FlutterActivity
 
