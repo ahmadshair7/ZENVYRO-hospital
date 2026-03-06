@@ -2,16 +2,14 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to all collections for now
-    // In a production app, you should restrict access to authenticated users
-    match /{document=**} {
-      allow read, write: if true;
+    // Allow users to reach their own documents
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
     }
     
-    // Example of more restrictive rules for Staff/Patients
-    // match /staff/{staffId} {
-    //   allow read: if request.auth != null;
-    //   allow write: if request.auth != null && request.auth.token.admin == true;
-    // }
+    // Default rule: allow authenticated users to read and write everything for now
+    match /{document=**} {
+      allow read, write: if request.auth != null;
+    }
   }
 }

@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../l10n/app_localizations.dart';
+import 'package:provider/provider.dart';
+import '../providers/locale_provider.dart';
+import '../providers/auth_provider.dart';
+import 'profile_screen.dart';
 import 'opd_screen.dart';
 import 'indoor_screen.dart';
 import 'emergency_screen.dart';
@@ -15,12 +20,22 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     const primaryBlue = Color(0xFF004B87);
     const secondaryTeal = Color(0xFF00A859);
+    final l10n = AppLocalizations.of(context)!;
+    final authProvider = Provider.of<AuthProvider>(context);
+
+    if (authProvider.isLoading || authProvider.userModel == null) {
+      return const Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FA),
       body: CustomScrollView(
         slivers: [
-          _buildSliverAppBar(context, primaryBlue, secondaryTeal),
+          _buildSliverAppBar(context, primaryBlue, secondaryTeal, l10n),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.all(24.0),
@@ -28,7 +43,7 @@ class HomeScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hospital Management',
+                    l10n.hospitalManagement,
                     style: GoogleFonts.outfit(
                       fontSize: 22,
                       fontWeight: FontWeight.bold,
@@ -37,14 +52,14 @@ class HomeScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    'Select a department to manage workflows',
+                    l10n.selectDepartment,
                     style: GoogleFonts.outfit(
                       fontSize: 14,
                       color: Colors.blueGrey,
                     ),
                   ),
                   const SizedBox(height: 24),
-                  _buildGrid(context),
+                  _buildGrid(context, l10n, authProvider.userModel!.role),
                   const SizedBox(height: 40),
                 ],
               ),
@@ -55,12 +70,38 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildSliverAppBar(BuildContext context, Color primary, Color secondary) {
+  Widget _buildSliverAppBar(BuildContext context, Color primary, Color secondary, AppLocalizations l10n) {
     return SliverAppBar(
       expandedHeight: 220,
       floating: false,
       pinned: true,
       backgroundColor: primary,
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.person_outline, color: Colors.white),
+          onPressed: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()));
+          },
+        ),
+        PopupMenuButton<Locale>(
+          icon: const Icon(Icons.language, color: Colors.white),
+          tooltip: l10n.selectLanguage,
+          onSelected: (Locale locale) {
+            final provider = Provider.of<LocaleProvider>(context, listen: false);
+            provider.setLocale(locale);
+          },
+          itemBuilder: (context) => [
+            PopupMenuItem(
+              value: const Locale('en'),
+              child: Text(l10n.english),
+            ),
+            PopupMenuItem(
+              value: const Locale('ur'),
+              child: Text(l10n.urdu),
+            ),
+          ],
+        ),
+      ],
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: BoxDecoration(
@@ -101,7 +142,7 @@ class HomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     Text(
-                      'ZENVYRO HOSPITAL',
+                      l10n.appTitle,
                       style: GoogleFonts.outfit(
                         color: Colors.white,
                         fontSize: 28,
@@ -110,7 +151,7 @@ class HomeScreen extends StatelessWidget {
                       ),
                     ),
                     Text(
-                      'Quality Care, Every Step of the Way',
+                      l10n.motto,
                       style: GoogleFonts.outfit(
                         color: Colors.white.withOpacity(0.8),
                         fontSize: 14,
@@ -127,7 +168,7 @@ class HomeScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildGrid(BuildContext context) {
+  Widget _buildGrid(BuildContext context, AppLocalizations l10n, String role) {
     return GridView.count(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -138,60 +179,62 @@ class HomeScreen extends StatelessWidget {
       children: [
         _buildMenuCard(
           context,
-          'OPD',
-          'Out-Patient Dept.',
+          l10n.opd,
+          l10n.opdDesc,
           Icons.person_search_rounded,
           const Color(0xFF2196F3),
           const OpdScreen(),
         ),
         _buildMenuCard(
           context,
-          'Indoor',
-          'Ward Management',
+          l10n.indoor,
+          l10n.indoorDesc,
           Icons.bed_rounded,
           const Color(0xFF009688),
           const IndoorScreen(),
         ),
         _buildMenuCard(
           context,
-          'Emergency',
-          '24/7 Rapid Care',
+          l10n.emergency,
+          l10n.emergencyDesc,
           Icons.emergency_rounded,
           const Color(0xFFE91E63),
           const EmergencyScreen(),
         ),
         _buildMenuCard(
           context,
-          'OT',
-          'Surgical Units',
+          l10n.ot,
+          l10n.otDesc,
           Icons.medical_services_rounded,
           const Color(0xFF673AB7),
           const OtScreen(),
         ),
         _buildMenuCard(
           context,
-          'Pharmacy',
-          'Medicine Dispensing',
+          l10n.pharmacy,
+          l10n.pharmacyDesc,
           Icons.local_pharmacy_rounded,
-          const Color(0xFF4CAF50),
+          const Color(0xFFFF5722),
           const PharmacyScreen(),
         ),
-        _buildMenuCard(
-          context,
-          'Management',
-          'Hospital Admin',
-          Icons.admin_panel_settings_rounded,
-          const Color(0xFF607D8B),
-          const AdminDashboardScreen(),
-        ),
-        _buildMenuCard(
-          context,
-          'Staff',
-          'Team Manager',
-          Icons.people_alt_rounded,
-          const Color(0xFF795548),
-          const StaffManagementScreen(),
-        ),
+        if (role == 'staff' || role == 'admin') ...[
+          _buildMenuCard(
+            context,
+            l10n.management,
+            l10n.managementDesc,
+            Icons.admin_panel_settings_rounded,
+            const Color(0xFFFF9800),
+            const AdminDashboardScreen(),
+          ),
+          _buildMenuCard(
+            context,
+            l10n.staff,
+            l10n.staffDesc,
+            Icons.people_alt_rounded,
+            const Color(0xFF4CAF50),
+            const StaffManagementScreen(),
+          ),
+        ],
       ],
     );
   }

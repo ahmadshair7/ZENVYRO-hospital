@@ -1,14 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 import 'screens/welcome_screen.dart';
 import 'services/storage_service.dart';
+import 'services/push_notification_service.dart';
 import 'models/doctor_model.dart';
+import 'package:provider/provider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'l10n/app_localizations.dart';
+import 'providers/locale_provider.dart';
+import 'providers/auth_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
   String? initError;
   try {
+    // Initialize Firebase
+    await Firebase.initializeApp(
+      options: DefaultFirebaseOptions.currentPlatform,
+    );
+
+    print('Firebase Initialized');
+
+    // Initialize Push Notifications
+    try {
+      await PushNotificationService.init();
+      print('Push Notifications Initialized');
+    } catch (e) {
+      print('Failed to initialize push notifications: $e');
+    }
+    
     // Initialize Local Storage
     await StorageService.init();
     print('Local Storage Initialized');
@@ -27,7 +50,15 @@ void main() async {
     initError = e.toString();
   }
   
-  runApp(MyApp(error: initError));
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (context) => LocaleProvider()),
+        ChangeNotifierProvider(create: (context) => AuthProvider()),
+      ],
+      child: MyApp(error: initError),
+    ),
+  );
 }
 
 class MyApp extends StatelessWidget {
@@ -41,9 +72,19 @@ class MyApp extends StatelessWidget {
     const secondaryTeal = Color(0xFF00A859);
     const medicalRed = Color(0xFFE30613);
 
+    final localeProvider = Provider.of<LocaleProvider>(context);
+
     return MaterialApp(
       title: 'ZENVYRO HOSPITAL',
       debugShowCheckedModeBanner: false,
+      locale: localeProvider.locale,
+      supportedLocales: L10n.all,
+      localizationsDelegates: const [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.fromSeed(

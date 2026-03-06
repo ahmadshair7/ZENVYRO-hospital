@@ -4,6 +4,7 @@ import '../models/doctor_model.dart';
 import '../models/ward_model.dart';
 import '../models/ot_schedule_model.dart';
 import '../services/storage_service.dart';
+import '../services/push_notification_service.dart';
 
 class DoctorCheckupScreen extends StatefulWidget {
   final DoctorCategory category;
@@ -292,6 +293,11 @@ class _DoctorCheckupScreenState extends State<DoctorCheckupScreen> {
     // Also update OPD status
     await StorageService.savePatient(widget.patient!.copyWith(status: 'Referred to ER'));
 
+    PushNotificationService.sendPushNotification(
+      title: 'Patient Shifted',
+      body: 'Patient ${widget.patient!.name} has been shifted to Emergency by ${widget.category.name}.',
+    );
+
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Patient referred to Emergency'), backgroundColor: Colors.red),
@@ -329,6 +335,11 @@ class _DoctorCheckupScreenState extends State<DoctorCheckupScreen> {
                   await StorageService.saveEmergencyPatient(updated);
                   // Also update OPD status
                   await StorageService.savePatient(widget.patient!.copyWith(status: 'Referred to Ward'));
+
+                  PushNotificationService.sendPushNotification(
+                    title: 'Patient Shifted',
+                    body: 'Patient ${widget.patient!.name} has been shifted to ${ward.name}.',
+                  );
 
                   if (mounted) {
                     Navigator.pop(context); // Close dialog
@@ -432,6 +443,11 @@ class _DoctorCheckupScreenState extends State<DoctorCheckupScreen> {
                   status: 'Scheduled for OT',
                 );
                 await StorageService.savePatient(updatedPatient);
+
+                PushNotificationService.sendPushNotification(
+                  title: 'Patient Shifted',
+                  body: 'Patient ${widget.patient!.name} has been scheduled for OT (${selectedOT!}) at $timeStr.',
+                );
 
                 if (mounted) {
                   Navigator.pop(context);

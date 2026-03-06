@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/doctor_model.dart';
 import '../services/storage_service.dart';
+import '../services/push_notification_service.dart';
 
 class EmergencyEnrollmentScreen extends StatefulWidget {
   const EmergencyEnrollmentScreen({super.key});
@@ -240,6 +241,12 @@ class _EmergencyEnrollmentScreenState extends State<EmergencyEnrollmentScreen> {
       try {
         await StorageService.saveEmergencyPatient(patient);
         await StorageService.saveEmergencyTokens(EmergencyTokenManager.getTokens());
+
+        PushNotificationService.sendPushNotification(
+          title: 'Emergency Patient Registered',
+          body: 'Patient ${patient.name} registered in Emergency with complaint: ${patient.initialComplaint}',
+        );
+
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Patient enrolled with Token: E-$token'), backgroundColor: Colors.green),

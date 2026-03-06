@@ -1,0 +1,49 @@
+{
+  "project_info": {
+    "project_number": "1007515095448",
+    "firebase_url": "https://dhqhospital-bf647-default-rtdb.firebaseio.com",
+    "project_id": "dhqhospital-bf647",
+    "storage_bucket": "dhqhospital-bf647.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1007515095448:android:d21b5cf34d69d7ada21bed",
+        "android_client_info": {
+          "package_name": "com.example.appd"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhBRv6PmCaxobV6259ZcHgKD14AH90xZI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1007515095448:android:c5d6cfbae553afa9a21bed",
+        "android_client_info": {
+          "package_name": "com.zenvyro.hospital"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhBRv6PmCaxobV6259ZcHgKD14AH90xZI"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

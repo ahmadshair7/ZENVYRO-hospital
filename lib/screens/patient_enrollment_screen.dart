@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../models/doctor_model.dart';
 import '../services/storage_service.dart';
+import '../services/push_notification_service.dart';
 import 'token_screen.dart';
 
 class PatientEnrollmentScreen extends StatefulWidget {
@@ -53,6 +54,11 @@ class _PatientEnrollmentScreenState extends State<PatientEnrollmentScreen> {
       try {
         await StorageService.savePatient(patient);
         await StorageService.saveTokens();
+
+        PushNotificationService.sendPushNotification(
+          title: 'New Patient Registered',
+          body: 'Patient ${patient.name} has been registered in Zencare for ${patient.categoryName}.',
+        );
 
         if (!mounted) return;
 

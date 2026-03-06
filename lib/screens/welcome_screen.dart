@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../l10n/app_localizations.dart';
 import 'home_screen.dart';
+import 'login_screen.dart';
+import '../services/auth_service.dart';
 
 class WelcomeScreen extends StatefulWidget {
   const WelcomeScreen({super.key});
@@ -30,12 +33,15 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
       CurvedAnimation(parent: _controller, curve: const Interval(0.0, 0.6, curve: Curves.easeOutBack)),
     );
 
-    _controller.forward().then((_) {
+    _controller.forward().then((_) async {
+      final isLoggedIn = await AuthService().isLoggedIn();
+      
       Future.delayed(const Duration(seconds: 1), () {
         if (mounted) {
           Navigator.of(context).pushReplacement(
             PageRouteBuilder(
-              pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
+              pageBuilder: (context, animation, secondaryAnimation) => 
+                isLoggedIn ? const HomeScreen() : const LoginScreen(),
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
                 return FadeTransition(opacity: animation, child: child);
               },
@@ -55,6 +61,8 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context)!;
+    
     return Scaffold(
       backgroundColor: Colors.white,
       body: Center(
@@ -85,7 +93,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
                     ),
                     const SizedBox(height: 40),
                     Text(
-                      'WELCOME TO',
+                      l10n.welcomeTo,
                       style: GoogleFonts.outfit(
                         fontSize: 16,
                         letterSpacing: 4,
@@ -99,7 +107,7 @@ class _WelcomeScreenState extends State<WelcomeScreen> with SingleTickerProvider
                         colors: [Color(0xFF004B87), Color(0xFF00A859)],
                       ).createShader(bounds),
                       child: Text(
-                        'ZENVYRO HOSPITAL',
+                        l10n.appTitle,
                         style: GoogleFonts.outfit(
                           fontSize: 32,
                           fontWeight: FontWeight.w900,
