@@ -20,7 +20,7 @@ class NotificationHelper {
         DarwinInitializationSettings();
 
     await _plugin.initialize(
-      const InitializationSettings(
+      settings: InitializationSettings(
         android: androidSettings,
         iOS: iosSettings,
       ),
@@ -38,10 +38,10 @@ class NotificationHelper {
     required String body,
   }) async {
     await _plugin.show(
-      DateTime.now().millisecond,
-      title,
-      body,
-      NotificationDetails(
+      id: DateTime.now().millisecond,
+      title: title,
+      body: body,
+      notificationDetails: NotificationDetails(
         android: AndroidNotificationDetails(
           _channel.id,
           _channel.name,

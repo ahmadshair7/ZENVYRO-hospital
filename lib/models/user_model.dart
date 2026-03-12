@@ -2,14 +2,14 @@ class UserModel {
   final String uid;
   final String name;
   final String email;
-  final String role; // 'patient' or 'staff'
+  final String role; // 'admin' or 'staff'
   final String? phoneNumber;
 
   UserModel({
     required this.uid,
     required this.name,
     required this.email,
-    this.role = 'patient',
+    this.role = 'admin',
     this.phoneNumber,
   });
 
@@ -28,7 +28,7 @@ class UserModel {
       uid: map['uid'] ?? '',
       name: map['name'] ?? '',
       email: map['email'] ?? '',
-      role: map['role'] ?? 'patient',
+      role: map['role'] ?? 'admin',
       phoneNumber: map['phoneNumber'],
     );
   }

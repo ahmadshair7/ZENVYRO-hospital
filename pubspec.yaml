@@ -49,6 +49,8 @@ dependencies:
   provider: ^6.1.2
   firebase_messaging: ^15.2.10
   flutter_local_notifications: ^20.1.0
+  pdf: ^3.11.3
+  printing: ^5.14.2
 
 dev_dependencies:
   flutter_test:

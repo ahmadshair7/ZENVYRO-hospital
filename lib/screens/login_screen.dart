@@ -31,18 +31,32 @@ class _LoginScreenState extends State<LoginScreen> {
       password: _passwordController.text,
     );
 
-    setState(() => _isLoading = false);
-
     if (mounted) {
       if (result['status'] == true) {
-        PushNotificationService.sendPushNotification(
-          title: 'Login Successful',
-          body: 'Welcome back to Zencare!',
-        );
-        Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
-        );
+        // Fetch user from database to verify role
+        final userModel = await AuthService().getUserDetails(AuthService().currentUid!);
+        
+        if (userModel != null && (userModel.role == 'admin' || userModel.role == 'staff')) {
+          PushNotificationService.sendPushNotification(
+            title: 'Login Successful',
+            body: 'Welcome back to Zencare Admin Panel!',
+          );
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const HomeScreen()),
+          );
+        } else {
+          // Logout if not admin/staff
+          await AuthService().logout();
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unauthorized Access: Only Admin/Staff can login.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
       } else {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(result['message'] ?? 'Login failed'),

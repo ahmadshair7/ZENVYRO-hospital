@@ -16,7 +16,7 @@ class AuthService {
     required String name,
     required String email,
     required String password,
-    String role = 'patient',
+    String role = 'admin',
   }) async {
     try {
       final UserCredential credential = await _auth.createUserWithEmailAndPassword(
@@ -91,7 +91,7 @@ class AuthService {
             uid: credential.user!.uid,
             name: credential.user!.displayName ?? 'User',
             email: email,
-            role: 'patient',
+            role: 'admin',
           );
           await _db.collection('users').doc(user.uid).set(user.toMap());
         }
@@ -138,5 +138,18 @@ class AuthService {
   /// Logout the user
   Future<void> logout() async {
     await _auth.signOut();
+  }
+
+  /// Get user details by UID
+  Future<UserModel?> getUserDetails(String uid) async {
+    try {
+      final doc = await _db.collection('users').doc(uid).get();
+      if (doc.exists) {
+        return UserModel.fromMap(doc.data()!);
+      }
+    } catch (e) {
+      print('Error fetching user details: $e');
+    }
+    return null;
   }
 }

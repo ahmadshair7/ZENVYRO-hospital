@@ -38,7 +38,15 @@ class AuthProvider extends ChangeNotifier {
     try {
       final doc = await _db.collection('users').doc(uid).get();
       if (doc.exists) {
-        _userModel = UserModel.fromMap(doc.data()!);
+        final user = UserModel.fromMap(doc.data()!);
+        if (user.role == 'admin' || user.role == 'staff') {
+          _userModel = user;
+        } else {
+          // Unauthorized role
+          await _auth.signOut();
+          _userModel = null;
+          _errorMessage = "Unauthorized Access: Only Admin/Staff accounts are allowed.";
+        }
       } else {
         _userModel = null;
         _errorMessage = "User record not found in database.";

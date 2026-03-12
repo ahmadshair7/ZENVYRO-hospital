@@ -4,6 +4,8 @@ import '../models/doctor_model.dart';
 import '../services/storage_service.dart';
 import '../models/staff_model.dart';
 import '../models/ward_model.dart';
+import '../models/pharmacy_bill_model.dart';
+import 'bill_receipt_screen.dart';
 
 class PharmacyScreen extends StatefulWidget {
   const PharmacyScreen({super.key});
@@ -219,9 +221,9 @@ class _PharmacyScreenState extends State<PharmacyScreen> {
                       width: double.infinity,
                       height: 48,
                       child: ElevatedButton(
-                        onPressed: () => _dispense(p, subType),
+                        onPressed: () => _openPricingDialog(p, subType, meds, themeColor),
                         style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                        child: const Text('MARK DISPENSED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 12)),
+                        child: const Text('GENERATE BILL & DISPENSE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 12)),
                       ),
                     ),
                   ],
@@ -269,13 +271,19 @@ class _PharmacyScreenState extends State<PharmacyScreen> {
                       height: 48,
                       child: ElevatedButton(
                         onPressed: () async {
-                          bed.isInpatientMedicinesDispensed = true;
-                          await StorageService.saveWards(predefinedWards);
-                          await StorageService.saveEmergencyUnits(emergencyUnits);
-                          _loadPharmacyQueue();
+                          // For Indoor, we need a pseudo-patient object to support billing
+                          final p = Patient(
+                            id: bed.id,
+                            name: bed.patientName ?? 'Unknown',
+                            age: bed.patientAge ?? 'N/A',
+                            mobile: 'Indoor Patient',
+                            categoryName: item['wardName'],
+                            tokenNumber: 0,
+                          );
+                          _openPricingDialog(p, 'Indoor (${item['wardName']})', meds, Colors.teal, bed: bed);
                         },
                         style: ElevatedButton.styleFrom(backgroundColor: Colors.teal, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                        child: const Text('MARK DISPENSED', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 12)),
+                        child: const Text('GENERATE BILL & DISPENSE', style: TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1, fontSize: 12)),
                       ),
                     ),
                   ],
@@ -289,29 +297,29 @@ class _PharmacyScreenState extends State<PharmacyScreen> {
   }
 
   Widget _buildDispensedList() {
-    if (_dispensedRecords.isEmpty) return _buildEmptyState();
+    return FutureBuilder<List<PharmacyBill>>(
+      future: StorageService.getAllPharmacyBills(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty) return _buildEmptyState();
+        final bills = snapshot.data!.reversed.toList();
 
-    return ListView.builder(
-      padding: const EdgeInsets.all(24),
-      itemCount: _dispensedRecords.length,
-      itemBuilder: (context, index) {
-        final r = _dispensedRecords[index];
-        return Card(
-          margin: const EdgeInsets.only(bottom: 12),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          child: ListTile(
-            leading: const CircleAvatar(backgroundColor: Colors.grey, child: Icon(Icons.check_rounded, color: Colors.white, size: 16)),
-            title: Text(r['patientName'], style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
-            subtitle: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Age: ${r['patientAge']} • Source: ${r['source']}', style: const TextStyle(fontSize: 11)),
-                const SizedBox(height: 4),
-                Text('Meds: ${r['medicines']}', style: TextStyle(fontSize: 12, color: Colors.green.shade700, fontWeight: FontWeight.w500)),
-              ],
-            ),
-            isThreeLine: true,
-          ),
+        return ListView.builder(
+          padding: const EdgeInsets.all(24),
+          itemCount: bills.length,
+          itemBuilder: (context, index) {
+            final b = bills[index];
+            return Card(
+              margin: const EdgeInsets.only(bottom: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.shade200)),
+              child: ListTile(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => BillReceiptScreen(bill: b))),
+                leading: CircleAvatar(backgroundColor: const Color(0xFF00A859).withOpacity(0.1), child: const Icon(Icons.receipt_rounded, color: Color(0xFF00A859), size: 16)),
+                title: Text(b.patientName, style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 14)),
+                subtitle: Text('Rs. ${b.grandTotal.toStringAsFixed(0)} • ${b.source}', style: const TextStyle(fontSize: 11)),
+                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: Colors.grey),
+              ),
+            );
+          },
         );
       },
     );
@@ -343,19 +351,150 @@ class _PharmacyScreenState extends State<PharmacyScreen> {
     );
   }
 
-  void _dispense(Patient p, String type) async {
-    try {
-      if (type == 'OPD') {
-        final history = p.history.map((c) => !c.isDispensed ? Consultation(date: c.date, complaint: c.complaint, diagnosis: c.diagnosis, vitals: c.vitals, medicines: c.medicines, isDispensed: true) : c).toList();
-        await StorageService.savePatient(p.copyWith(history: history));
-      } else if (type == 'ER') {
-        await StorageService.saveEmergencyPatient(p.copyWith(isEmergencyMedicinesDispensed: true));
-      } else if (type == 'Discharge') {
-        await StorageService.saveEmergencyPatient(p.copyWith(isDischargeMedicinesDispensed: true));
-      }
-      _loadPharmacyQueue();
-    } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red));
+  void _openPricingDialog(Patient p, String source, List<String> meds, Color themeColor, {Bed? bed}) {
+    final List<Map<String, dynamic>> items = meds.map((m) => {
+      'name': m,
+      'type': 'Tablet',
+      'quantity': 1,
+      'price': 0.0,
+      'typeController': TextEditingController(text: 'Tablet'),
+      'qtyController': TextEditingController(text: '1'),
+      'priceController': TextEditingController(),
+    }).toList();
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          double total = 0;
+          for (var item in items) {
+            final price = double.tryParse(item['priceController'].text) ?? 0.0;
+            total += price;
+          }
+
+          return AlertDialog(
+            title: Text('Billing Detail: ${p.name}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ...items.map((item) => Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(
+                                flex: 2,
+                                child: DropdownButtonFormField<String>(
+                                  value: item['type'],
+                                  items: ['Tablet', 'Capsule', 'Injection', 'Syrup', 'Drops', 'Ointment', 'Other'].map((t) => DropdownMenuItem(value: t, child: Text(t, style: const TextStyle(fontSize: 12)))).toList(),
+                                  onChanged: (v) => setDialogState(() => item['type'] = v!),
+                                  decoration: const InputDecoration(labelText: 'Type', contentPadding: EdgeInsets.symmetric(horizontal: 8)),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 1,
+                                child: TextField(
+                                  controller: item['qtyController'],
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'Qty', contentPadding: EdgeInsets.symmetric(horizontal: 8)),
+                                  onChanged: (_) => setDialogState(() {}),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                flex: 2,
+                                child: TextField(
+                                  controller: item['priceController'],
+                                  keyboardType: TextInputType.number,
+                                  decoration: const InputDecoration(labelText: 'Price', contentPadding: EdgeInsets.symmetric(horizontal: 8), prefixText: 'Rs.'),
+                                  onChanged: (_) => setDialogState(() {}),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    )),
+                    const Divider(),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('GRAND TOTAL:', style: GoogleFonts.outfit(fontWeight: FontWeight.bold)),
+                        Text('Rs. ${total.toStringAsFixed(0)}', style: GoogleFonts.outfit(fontWeight: FontWeight.bold, fontSize: 18, color: themeColor)),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(context), child: const Text('CANCEL')),
+              ElevatedButton(
+                onPressed: () async {
+                  final dispensedMeds = items.map((i) {
+                    final qty = int.tryParse(i['qtyController'].text) ?? 1;
+                    final price = double.tryParse(i['priceController'].text) ?? 0.0;
+                    return DispensedMedicine(
+                      name: i['name'],
+                      type: i['type'],
+                      quantity: qty,
+                      pricePerUnit: price, // Now represents the total price for this item
+                      totalPrice: price,
+                    );
+                  }).toList();
+
+                  final bill = PharmacyBill(
+                    id: PharmacyBill.generateId(),
+                    patientId: p.id,
+                    patientName: p.name,
+                    patientAge: p.age,
+                    patientMobile: p.mobile,
+                    source: source,
+                    medicines: dispensedMeds,
+                    date: DateTime.now(),
+                    grandTotal: total,
+                  );
+
+                  await StorageService.savePharmacyBill(bill);
+                  await _finalizeDispensing(p, source, bed: bed);
+
+                  if (context.mounted) {
+                    Navigator.pop(context);
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => BillReceiptScreen(bill: bill)));
+                    _loadPharmacyQueue();
+                  }
+                },
+                style: ElevatedButton.styleFrom(backgroundColor: themeColor, foregroundColor: Colors.white),
+                child: const Text('GENERATE & PRINT'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _finalizeDispensing(Patient p, String source, {Bed? bed}) async {
+    if (source == 'OPD') {
+      final history = p.history.map((c) => !c.isDispensed ? Consultation(date: c.date, complaint: c.complaint, diagnosis: c.diagnosis, vitals: c.vitals, medicines: c.medicines, isDispensed: true) : c).toList();
+      await StorageService.savePatient(p.copyWith(history: history));
+    } else if (source == 'ER') {
+      await StorageService.saveEmergencyPatient(p.copyWith(isEmergencyMedicinesDispensed: true));
+    } else if (source.startsWith('Discharge')) {
+      await StorageService.saveEmergencyPatient(p.copyWith(isDischargeMedicinesDispensed: true));
+    } else if (bed != null) {
+      bed.isInpatientMedicinesDispensed = true;
+      await StorageService.saveWards(predefinedWards);
+      await StorageService.saveEmergencyUnits(emergencyUnits);
     }
   }
 }

@@ -4,6 +4,7 @@ import '../models/doctor_model.dart';
 import '../models/ward_model.dart';
 import '../models/staff_model.dart';
 import '../models/ot_schedule_model.dart';
+import '../models/pharmacy_bill_model.dart';
 
 class StorageService {
   static late SharedPreferences _prefs;
@@ -468,5 +469,36 @@ class StorageService {
   static Future<List<OTSchedule>> getOTSchedulesForOTRoom(String otRoom, String date) async {
     final all = await getAllOTSchedules();
     return all.where((s) => s.otRoom == otRoom && s.date == date).toList();
+  }
+
+  // ─── PHARMACY BILLS ──────────────────────────────────────────────────────
+
+  static const String _pharmacyBillsKey = 'pharmacy_bills';
+
+  static Future<void> savePharmacyBill(PharmacyBill bill) async {
+    final bills = await getAllPharmacyBills();
+    bills.add(bill);
+    await _prefs.setString(_pharmacyBillsKey, jsonEncode(bills.map((b) => b.toJson()).toList()));
+  }
+
+  static Future<void> updatePharmacyBill(PharmacyBill updatedBill) async {
+    final bills = await getAllPharmacyBills();
+    final index = bills.indexWhere((b) => b.id == updatedBill.id);
+    if (index != -1) {
+      bills[index] = updatedBill;
+      await _prefs.setString(_pharmacyBillsKey, jsonEncode(bills.map((b) => b.toJson()).toList()));
+    }
+  }
+
+  static Future<List<PharmacyBill>> getAllPharmacyBills() async {
+    final data = _prefs.getString(_pharmacyBillsKey);
+    if (data == null) return [];
+    try {
+      final List<dynamic> list = jsonDecode(data);
+      return list.map((item) => PharmacyBill.fromJson(item)).toList();
+    } catch (e) {
+      print('Error fetching pharmacy bills: $e');
+      return [];
+    }
   }
 }

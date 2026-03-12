@@ -18,7 +18,7 @@ class _SignupScreenState extends State<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   
-  String _selectedRole = 'patient';
+  final String _selectedRole = 'admin';
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
@@ -47,8 +47,8 @@ class _SignupScreenState extends State<SignupScreen> {
         );
 
         PushNotificationService.sendPushNotification(
-          title: 'Registration Successful',
-          body: 'Your account has been created successfully. Please login to continue.',
+          title: 'Admin Registration Successful',
+          body: 'Admin account has been created successfully. Please login to continue.',
         );
 
         Navigator.of(context).pushReplacement(
@@ -93,10 +93,10 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Icon(Icons.local_hospital_rounded, size: 70, color: Colors.white),
+                  const Icon(Icons.admin_panel_settings_rounded, size: 70, color: Colors.white),
                   const SizedBox(height: 16),
                   Text(
-                    l10n.createAccount,
+                    'Admin Registration',
                     style: GoogleFonts.outfit(
                       fontSize: 32,
                       fontWeight: FontWeight.bold,
@@ -147,21 +147,6 @@ class _SignupScreenState extends State<SignupScreen> {
                       },
                     ),
                     const SizedBox(height: 20),
-                    DropdownButtonFormField<String>(
-                      value: _selectedRole,
-                      decoration: InputDecoration(
-                        labelText: l10n.iAmA,
-                        prefixIcon: const Icon(Icons.badge_outlined),
-                      ),
-                      items: [
-                        DropdownMenuItem(value: 'patient', child: Text(l10n.patientRole)),
-                        DropdownMenuItem(value: 'staff', child: Text(l10n.staffRole)),
-                      ],
-                      onChanged: (value) {
-                        if (value != null) setState(() => _selectedRole = value);
-                      },
-                    ),
-                    const SizedBox(height: 20),
                     TextFormField(
                       controller: _passwordController,
                       obscureText: !_isPasswordVisible,
@@ -196,7 +181,7 @@ class _SignupScreenState extends State<SignupScreen> {
                         child: _isLoading
                             ? const CircularProgressIndicator(color: Colors.white)
                             : Text(
-                                l10n.signUp.toUpperCase(),
+                                'REGISTER ADMIN',
                                 style: GoogleFonts.outfit(
                                   fontSize: 18,
                                   fontWeight: FontWeight.bold,

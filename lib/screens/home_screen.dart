@@ -217,24 +217,22 @@ class HomeScreen extends StatelessWidget {
           const Color(0xFFFF5722),
           const PharmacyScreen(),
         ),
-        if (role == 'staff' || role == 'admin') ...[
-          _buildMenuCard(
-            context,
-            l10n.management,
-            l10n.managementDesc,
-            Icons.admin_panel_settings_rounded,
-            const Color(0xFFFF9800),
-            const AdminDashboardScreen(),
-          ),
-          _buildMenuCard(
-            context,
-            l10n.staff,
-            l10n.staffDesc,
-            Icons.people_alt_rounded,
-            const Color(0xFF4CAF50),
-            const StaffManagementScreen(),
-          ),
-        ],
+        _buildMenuCard(
+          context,
+          l10n.management,
+          l10n.managementDesc,
+          Icons.admin_panel_settings_rounded,
+          const Color(0xFFFF9800),
+          const AdminDashboardScreen(),
+        ),
+        _buildMenuCard(
+          context,
+          l10n.staff,
+          l10n.staffDesc,
+          Icons.people_alt_rounded,
+          const Color(0xFF4CAF50),
+          const StaffManagementScreen(),
+        ),
       ],
     );
   }
